@@ -9,6 +9,17 @@
 
 Qwen2.5-1.5B-Instruct 모델을 vLLM으로 로컬 서빙하고, OpenCode CLI 에이전트에서 해당 모델을 사용하여 tool call 기반 코딩 에이전트를 구성한다. 이후 OpenCode 플러그인(oh-my-opencode)까지 설치하여 동작을 검증한다.
 
+## 검증된 버전 정보
+
+| 도구 | 버전 | 설치 방법 |
+|---|---|---|
+| vLLM | 0.15.1 | `pip install vllm` |
+| OpenCode | 1.2.10 | `npm install -g opencode-ai@latest` |
+| oh-my-opencode | 3.8.5 | `npm install -g oh-my-opencode` |
+| Qwen2.5-1.5B-Instruct | - | `huggingface-cli download` |
+
+> 이 가이드는 위 버전 조합으로 검증되었습니다. 버전이 크게 다르면 설정 방법이 달라질 수 있습니다.
+
 ## 사전 요구사항
 
 - Linux (Ubuntu 등)
@@ -43,6 +54,7 @@ ls ~/Qwen2.5-1.5B-Instruct/
 pip install vllm
 ```
 
+**터미널 1** (vLLM 서버 전용 — 서버가 포그라운드로 실행됨):
 ```bash
 vllm serve ~/Qwen2.5-1.5B-Instruct \
   --host 0.0.0.0 \
@@ -51,6 +63,17 @@ vllm serve ~/Qwen2.5-1.5B-Instruct \
   --tool-call-parser hermes \
   --max-model-len 32768 \
   --dtype auto
+```
+
+또는 백그라운드로 실행하려면:
+```bash
+nohup vllm serve ~/Qwen2.5-1.5B-Instruct \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  --max-model-len 32768 \
+  --dtype auto > ~/vllm.log 2>&1 &
 ```
 
 **핵심 옵션 설명:**
@@ -71,9 +94,17 @@ vllm serve ~/Qwen2.5-1.5B-Instruct \
 
 ### 1-3. 서빙 확인
 
+**터미널 2** (새 터미널 열기):
 ```bash
-python3 -c "import urllib.request, json; print(json.dumps(json.loads(urllib.request.urlopen('http://localhost:8000/v1/models').read()), indent=2))"
+python3 << 'EOF'
+import urllib.request, json
+resp = urllib.request.urlopen('http://localhost:8000/v1/models')
+data = json.loads(resp.read())
+print(json.dumps(data, indent=2))
+EOF
 ```
+
+> vLLM 서버가 준비되기까지 1~2분 소요될 수 있다. 연결 거부 시 잠시 후 재시도.
 
 응답 예시:
 ```json
@@ -87,7 +118,7 @@ python3 -c "import urllib.request, json; print(json.dumps(json.loads(urllib.requ
 }
 ```
 
-> **이 응답의 `id` 값이 opencode.json에서 사용할 모델 ID입니다. 정확히 기억하세요.**
+> **이 응답의 `id` 값을 복사해두세요. opencode.json에서 이 값을 그대로 사용합니다.**
 
 ---
 
@@ -106,11 +137,21 @@ opencode --version
 
 > **패키지명은 `opencode`가 아니라 `opencode-ai`입니다.**
 
-### 2-2. opencode.json 설정
+### 2-2. 프로젝트 디렉토리 생성 및 이동
 
-프로젝트 루트 디렉토리에 `opencode.json` 파일을 생성한다.
+```bash
+mkdir -p ~/myproject && cd ~/myproject
+```
+
+> 이후 모든 명령어는 이 프로젝트 디렉토리에서 실행한다.
+
+### 2-3. opencode.json 설정
+
+프로젝트 디렉토리에 `opencode.json` 파일을 생성한다.
 
 > **Phase 3 (OpenCode 단독 테스트) 용 설정입니다. plugin은 아직 추가하지 않습니다.**
+
+아래 JSON에서 **`YOUR_MODEL_ID`** 부분(3곳)을 Phase 1-3에서 확인한 실제 모델 ID로 교체한다:
 
 ```json
 {
@@ -124,7 +165,7 @@ opencode --version
         "apiKey": "EMPTY"
       },
       "models": {
-        "/home/username/Qwen2.5-1.5B-Instruct": {
+        "YOUR_MODEL_ID": {
           "name": "Qwen2.5-1.5B (vLLM local)",
           "limit": {
             "context": 32768,
@@ -134,11 +175,19 @@ opencode --version
       }
     }
   },
-  "model": "vllm_qwen_local//home/username/Qwen2.5-1.5B-Instruct"
+  "model": "vllm_qwen_local/YOUR_MODEL_ID"
 }
 ```
 
-> `/home/username/Qwen2.5-1.5B-Instruct` 부분을 Phase 1-3에서 확인한 실제 모델 ID로 교체할 것.
+예시 — 모델 ID가 `/home/sk2011cho/Qwen2.5-1.5B-Instruct`인 경우:
+```
+"YOUR_MODEL_ID" → "/home/sk2011cho/Qwen2.5-1.5B-Instruct"
+```
+```
+"model": "vllm_qwen_local/YOUR_MODEL_ID"
+→ "model": "vllm_qwen_local//home/sk2011cho/Qwen2.5-1.5B-Instruct"
+```
+> (경로가 `/`로 시작하므로 `vllm_qwen_local/` 뒤에 `/`가 두 개가 됩니다. 이것이 정상입니다.)
 
 **설정 포인트:**
 
@@ -153,13 +202,13 @@ opencode --version
 | **`limit.output`** | **모델 최대 출력 토큰 (4096). 이 값이 없으면 OpenCode가 기본 32000을 요청하여 에러 발생!** |
 | `model` | `"provider명/모델ID"` 형식 |
 
-### 2-3. 설정 검증
+### 2-4. 설정 검증
 
 ```bash
 opencode models
 ```
 
-출력 하단에 `vllm_qwen_local//home/username/Qwen2.5-1.5B-Instruct`가 보이면 설정 완료.
+출력 하단에 `vllm_qwen_local/...`가 보이면 설정 완료.
 
 ### 흔한 설정 실수와 해결
 
@@ -183,7 +232,7 @@ opencode models
 ```jsonc
 // 틀림 — limit 없으면 OpenCode가 max_tokens=32000 요청
 "models": {
-  "/home/username/Qwen2.5-1.5B-Instruct": {
+  "YOUR_MODEL_ID": {
     "name": "Qwen2.5-1.5B (vLLM local)"
   }
 }
@@ -195,8 +244,14 @@ opencode models
 #### 실수 3: 모델 경로 불일치 (모델 못 찾음)
 
 ```bash
-# vLLM에서 실제 모델 ID 확인
-python3 -c "import urllib.request, json; print(json.loads(urllib.request.urlopen('http://localhost:8000/v1/models').read()))"
+# vLLM에서 실제 모델 ID 재확인
+python3 << 'EOF'
+import urllib.request, json
+resp = urllib.request.urlopen('http://localhost:8000/v1/models')
+data = json.loads(resp.read())
+for m in data['data']:
+    print(m['id'])
+EOF
 ```
 
 > opencode.json의 `models` 키와 `model` 값이 vLLM 응답의 `id`와 **글자 하나까지 정확히 일치**해야 한다.
@@ -256,7 +311,7 @@ oh-my-opencode install --no-tui \
 
 oh-my-opencode를 사용하려면 프로젝트 `opencode.json`에 **`plugin` 항목을 추가**한다.
 
-최종 `opencode.json` 전체:
+기존 opencode.json의 맨 위에 `"plugin"` 한 줄만 추가하면 된다:
 
 ```json
 {
@@ -273,7 +328,7 @@ oh-my-opencode를 사용하려면 프로젝트 `opencode.json`에 **`plugin` 항
         "apiKey": "EMPTY"
       },
       "models": {
-        "/home/username/Qwen2.5-1.5B-Instruct": {
+        "YOUR_MODEL_ID": {
           "name": "Qwen2.5-1.5B (vLLM local)",
           "limit": {
             "context": 32768,
@@ -283,15 +338,15 @@ oh-my-opencode를 사용하려면 프로젝트 `opencode.json`에 **`plugin` 항
       }
     }
   },
-  "model": "vllm_qwen_local//home/username/Qwen2.5-1.5B-Instruct"
+  "model": "vllm_qwen_local/YOUR_MODEL_ID"
 }
 ```
 
 > **`"plugin": ["oh-my-opencode@latest"]`가 없으면 oh-my-opencode가 정상 동작하지 않는다.**
 
-> **주의:** oh-my-opencode install 시 글로벌 설정 `~/.config/opencode/opencode.json`에도 plugin이 추가된다.
+> **주의:** oh-my-opencode install 시 글로벌 설정 `~/.config/opencode/opencode.json`에도 plugin이 자동 추가된다.
 > 이 글로벌 설정이 있으면 `opencode run` 실행 시에도 기본 에이전트가 `build`가 아닌 `Sisyphus`로 변경된다.
-> OpenCode 단독(build agent)으로 테스트하고 싶다면 글로벌 설정에서 plugin을 제거해야 한다:
+> OpenCode 단독(build agent)으로 다시 테스트하고 싶다면 글로벌 설정에서 plugin을 제거해야 한다:
 > ```bash
 > # 글로벌 설정 확인
 > cat ~/.config/opencode/opencode.json
@@ -324,9 +379,10 @@ cat test2.txt
 - [ ] Qwen2.5-1.5B-Instruct 모델 다운로드 완료
 - [ ] vLLM 설치 완료 (`pip install vllm`)
 - [ ] vLLM 서빙 시작 (`--max-model-len 32768`, tool call 옵션 활성화)
-- [ ] 서빙 확인 및 모델 ID 확인 (`python3 -c "..."`)
+- [ ] 서빙 확인 및 모델 ID 확인 (`python3 << 'EOF' ...`)
 - [ ] OpenCode 설치 완료 (`npm install -g opencode-ai@latest`)
-- [ ] `opencode.json` 설정 완료 (`limit` 설정 포함!)
+- [ ] 프로젝트 디렉토리 생성 및 이동
+- [ ] `opencode.json` 설정 완료 (`limit` 설정 포함, 모델 ID 3곳 교체!)
 - [ ] `opencode models`에서 로컬 모델 확인
 - [ ] OpenCode build agent 모드에서 `test.txt` 생성 성공
 - [ ] oh-my-opencode 설치 완료 (`npm install -g oh-my-opencode`)
@@ -359,13 +415,14 @@ cat test2.txt
 1.  모델 다운로드         pip install huggingface_hub && huggingface-cli download ...
 2.  vLLM 설치            pip install vllm
 3.  vLLM 서빙            vllm serve ... --max-model-len 32768 --enable-auto-tool-choice --tool-call-parser hermes
-4.  서빙 확인            python3 -c "import urllib.request, json; ..." → 모델 ID 확인
+4.  서빙 확인            python3 스크립트로 /v1/models 호출 → 모델 ID 복사
 5.  OpenCode 설치        npm install -g opencode-ai@latest
-6.  opencode.json 작성   provider + models(limit 포함) + model 설정 (plugin은 아직 추가하지 않음)
-7.  설정 검증            opencode models
-8.  OpenCode 테스트      opencode run "..." → test.txt 생성 확인
-9.  oh-my-opencode 설치  npm install -g oh-my-opencode
-10. oh-my-opencode 설정  oh-my-opencode install --no-tui --claude=no --openai=no --gemini=no --copilot=no --skip-auth
-11. plugin 등록          opencode.json에 "plugin": ["oh-my-opencode@latest"] 추가
-12. oh-my-opencode 테스트 oh-my-opencode run "..." → test2.txt 생성 확인
+6.  프로젝트 디렉토리     mkdir -p ~/myproject && cd ~/myproject
+7.  opencode.json 작성   provider + models(limit 포함) + model 설정 (모델 ID 3곳 교체!)
+8.  설정 검증            opencode models
+9.  OpenCode 테스트      opencode run "..." → test.txt 생성 확인
+10. oh-my-opencode 설치  npm install -g oh-my-opencode
+11. oh-my-opencode 설정  oh-my-opencode install --no-tui --claude=no --openai=no --gemini=no --copilot=no --skip-auth
+12. plugin 등록          opencode.json에 "plugin": ["oh-my-opencode@latest"] 추가
+13. oh-my-opencode 테스트 oh-my-opencode run "..." → test2.txt 생성 확인
 ```
