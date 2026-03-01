@@ -1,0 +1,64 @@
+{
+  // oh-my-opencode 폐쇄망 설정
+  // GLM-4-9B-Chat + 로컬 vLLM 환경용
+
+  // Hashline Edit 비활성화 (GLM-4 호환 불가)
+  "hashline_edit": false,
+
+  // 외부 MCP 서버 비활성화
+  "disabled_mcps": ["websearch", "context7", "grep_app"],
+
+  // 모델 폴백 비활성화
+  "model_fallback": false,
+
+  // 토큰 절약을 위해 불필요한 도구 비활성화
+  "disabled_tools": [
+    "lsp_goto_definition",
+    "lsp_find_references",
+    "lsp_symbols",
+    "lsp_diagnostics",
+    "lsp_prepare_rename",
+    "lsp_rename",
+    "lsp_hover",
+    "lsp_code_action",
+    "lsp_completion",
+    "lsp_signature_help",
+    "lsp_document_highlight",
+    "ast_grep_search",
+    "ast_grep_replace",
+    "background_output",
+    "background_cancel"
+  ],
+
+  // 외부 모델 요구 에이전트 비활성화
+  "disabled_agents": [
+    "hephaestus",
+    "prometheus",
+    "atlas",
+    "oracle",
+    "librarian",
+    "explore",
+    "multimodal-looker",
+    "metis",
+    "momus",
+    "sisyphus-junior"
+  ],
+
+  // 에이전트 모델을 로컬 vLLM으로 오버라이드
+  "agents": {
+    "build": { "model": "vllm/glm-4" },
+    "sisyphus": { "model": "vllm/glm-4" }
+  },
+
+  // 인터넷 필요 스킬 비활성화
+  "disabled_skills": [
+    "playwright",
+    "agent-browser",
+    "dev-browser"
+  ],
+
+  // write 차단 훅 비활성화
+  "disabled_hooks": [
+    "write-existing-file-guard"
+  ]
+}

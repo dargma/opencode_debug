@@ -11,13 +11,14 @@
         "glm-4": {
           "name": "GLM-4-9B-Chat (local)",
           "limit": {
-            "context": 8192,
-            "output": 4096
+            "context": 32768,
+            "output": 8192
           }
         }
       }
     }
   },
   "model": "vllm/glm-4",
-  "small_model": "vllm/glm-4"
+  "small_model": "vllm/glm-4",
+  "plugin": ["oh-my-opencode"]
 }
