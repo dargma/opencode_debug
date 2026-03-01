@@ -1,26 +1,23 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "oh-my-opencode@latest"
-  ],
   "provider": {
-    "vllm_qwen_local": {
+    "vllm": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "vLLM Qwen Local",
+      "name": "vLLM (local)",
       "options": {
-        "baseURL": "http://localhost:8000/v1",
-        "apiKey": "EMPTY"
+        "baseURL": "http://localhost:8000/v1"
       },
       "models": {
-        "/content/Qwen2.5-1.5B-Instruct": {
-          "name": "Qwen2.5-1.5B (vLLM local)",
+        "glm-4": {
+          "name": "GLM-4-9B-Chat (local)",
           "limit": {
-            "context": 32768,
+            "context": 8192,
             "output": 4096
           }
         }
       }
     }
   },
-  "model": "vllm_qwen_local//content/Qwen2.5-1.5B-Instruct"
+  "model": "vllm/glm-4",
+  "small_model": "vllm/glm-4"
 }
